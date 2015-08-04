@@ -2308,7 +2308,7 @@ public:
 extern "C" void strIteratorGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
     BoxedStringIterator* it = (BoxedStringIterator*)b;
-    v->visit(it->s);
+    v->visit((void**)&it->s);
 }
 
 Box* strIter(BoxedString* self) noexcept {

@@ -50,7 +50,7 @@ extern "C" void setIteratorGCHandler(GCVisitor* v, Box* b) {
 
     BoxedSetIterator* it = (BoxedSetIterator*)b;
 
-    v->visit(it->s);
+    v->visit((void**)&it->s);
 }
 
 Box* setiteratorHasnext(BoxedSetIterator* self) {

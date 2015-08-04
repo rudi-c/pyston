@@ -413,7 +413,7 @@ void BoxedMethodDescriptor::gcHandler(GCVisitor* v, Box* _o) {
     BoxedMethodDescriptor* o = static_cast<BoxedMethodDescriptor*>(_o);
 
     boxGCHandler(v, o);
-    v->visit(o->type);
+    v->visit((void**)&o->type);
 }
 
 Box* BoxedWrapperDescriptor::__get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner) {
@@ -465,7 +465,7 @@ void BoxedWrapperDescriptor::gcHandler(GCVisitor* v, Box* _o) {
     BoxedWrapperDescriptor* o = static_cast<BoxedWrapperDescriptor*>(_o);
 
     boxGCHandler(v, o);
-    v->visit(o->type);
+    v->visit((void**)&o->type);
 }
 
 static Box* wrapperdescrGetDoc(Box* b, void*) {
@@ -583,7 +583,7 @@ void BoxedWrapperObject::gcHandler(GCVisitor* v, Box* _o) {
     BoxedWrapperObject* o = static_cast<BoxedWrapperObject*>(_o);
 
     boxGCHandler(v, o);
-    v->visit(o->obj);
+    v->visit((void**)&o->obj);
 }
 
 void setupDescr() {

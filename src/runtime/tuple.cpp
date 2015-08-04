@@ -415,7 +415,7 @@ BoxedClass* tuple_iterator_cls = NULL;
 extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
     BoxedTupleIterator* it = (BoxedTupleIterator*)b;
-    v->visit(it->t);
+    v->visit((void**)&it->t);
 }
 
 static int64_t tuple_hash(BoxedTuple* v) noexcept {

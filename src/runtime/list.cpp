@@ -920,7 +920,7 @@ BoxedClass* list_reverse_iterator_cls = NULL;
 extern "C" void listIteratorGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
     BoxedListIterator* it = (BoxedListIterator*)b;
-    v->visit(it->l);
+    v->visit((void**)&it->l);
 }
 
 Box* listNew(BoxedClass* cls, Box* container) {

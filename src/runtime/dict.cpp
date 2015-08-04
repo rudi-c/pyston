@@ -682,7 +682,7 @@ extern "C" void dictIteratorGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedDictIterator* it = static_cast<BoxedDictIterator*>(b);
-    v->visit(it->d);
+    v->visit((void**)&it->d);
 }
 
 BoxedClass* dict_keys_cls = NULL;
@@ -692,7 +692,7 @@ extern "C" void dictViewGCHandler(GCVisitor* v, Box* b) {
     boxGCHandler(v, b);
 
     BoxedDictView* view = static_cast<BoxedDictView*>(b);
-    v->visit(view->d);
+    v->visit((void**)&view->d);
 }
 
 static int dict_init(PyObject* self, PyObject* args, PyObject* kwds) noexcept {

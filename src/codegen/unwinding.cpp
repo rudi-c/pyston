@@ -568,9 +568,12 @@ public:
         if (!o->is_active)
             return;
 
-        v->visitIf(o->exc_info.type);
-        v->visitIf(o->exc_info.value);
-        v->visitIf(o->exc_info.traceback);
+        if (o->exc_info.type)
+            v->visit((void**)&o->exc_info.type);
+        if (o->exc_info.value)
+            v->visit((void**)&o->exc_info.value);
+        if (o->exc_info.traceback)
+            v->visit((void**)&o->exc_info.traceback);
     }
 };
 static __thread PythonUnwindSession* cur_unwind;

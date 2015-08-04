@@ -329,7 +329,7 @@ bool GCVisitor::isValid(void* p) {
     return global_heap.getAllocationFromInteriorPointer(p) != NULL;
 }
 
-void GCVisitor::visitRange(void* const* start, void* const* end) {
+void GCVisitor::visitRange(void** start, void** end) {
     ASSERT((const char*)end - (const char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
            ((const char*)end - (const char*)start) * 1.0 / (1 << 30));
 
@@ -337,7 +337,7 @@ void GCVisitor::visitRange(void* const* start, void* const* end) {
     assert((uintptr_t)end % sizeof(void*) == 0);
 
     while (start < end) {
-        visit(*start);
+        visit(start);
         start++;
     }
 }
@@ -366,7 +366,8 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
     }
 }
 
-void GCVisitorMarking::visit(void* p) {
+void GCVisitorMarking::visit(void** ptr_address) {
+    void* p = *ptr_address;
     if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
         ASSERT(!p || isNonheapRoot(p), "%p", p);
         return;
@@ -379,7 +380,7 @@ void GCVisitorMarking::visit(void* p) {
 void GCVisitorMarking::visitPotential(void* p) {
     GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
     if (a) {
-        visit(a->user_data);
+        stack->push(a->user_data);
     }
 }
 
@@ -423,7 +424,7 @@ static void markRoots(GCVisitor& visitor) {
 
     GC_TRACE_LOG("Looking at root handles\n");
     for (auto h : *getRootHandles()) {
-        visitor.visit(h->value);
+        visitor.visit((void**)&h->value);
     }
 
     GC_TRACE_LOG("Looking at potential root ranges\n");
@@ -433,12 +434,12 @@ static void markRoots(GCVisitor& visitor) {
 
     GC_TRACE_LOG("Looking at pending finalization list\n");
     for (auto box : pending_finalization_list) {
-        visitor.visit(box);
+        visitor.visit((void**)&box);
     }
 
     GC_TRACE_LOG("Looking at weakrefs needing callbacks list\n");
     for (auto weakref : weakrefs_needing_callback_list) {
-        visitor.visit(weakref);
+        visitor.visit((void**)&weakref);
     }
 }
 
@@ -664,7 +665,7 @@ static void markPhase() {
     for (BoxedClass* cls : class_objects) {
         GCAllocation* al = GCAllocation::fromUserData(cls);
         if (!isMarked(al)) {
-            visitor.visit(cls);
+            visitor.visit((void**)&cls);
             classes_to_remove.push_back(cls);
         }
     }
