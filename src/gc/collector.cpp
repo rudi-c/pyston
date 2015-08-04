@@ -75,7 +75,7 @@ enum TraceStackType {
 };
 
 class TraceStack {
-private:
+protected:
     const int CHUNK_SIZE = 256;
     const int MAX_FREE_CHUNKS = 50;
 
@@ -85,6 +85,8 @@ private:
     void** cur;
     void** start;
     void** end;
+
+    void* previous_pop = NULL;
 
     TraceStackType visit_type;
 
@@ -206,10 +208,13 @@ public:
 
 
     void* pop() {
-        if (cur > start)
-            return *--cur;
+        if (cur > start) {
+            previous_pop = *--cur;
+        } else {
+            previous_pop = pop_chunk_and_item();
+        }
 
-        return pop_chunk_and_item();
+        return previous_pop;
     }
 };
 std::vector<void**> TraceStack::free_chunks;
@@ -324,16 +329,6 @@ bool GCVisitor::isValid(void* p) {
     return global_heap.getAllocationFromInteriorPointer(p) != NULL;
 }
 
-void GCVisitor::visit(void* p) {
-    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
-        ASSERT(!p || isNonheapRoot(p), "%p", p);
-        return;
-    }
-
-    ASSERT(global_heap.getAllocationFromInteriorPointer(p)->user_data == p, "%p", p);
-    stack->push(p);
-}
-
 void GCVisitor::visitRange(void* const* start, void* const* end) {
     ASSERT((const char*)end - (const char*)start <= 1000000000, "Asked to scan %.1fGB -- a bug?",
            ((const char*)end - (const char*)start) * 1.0 / (1 << 30));
@@ -344,13 +339,6 @@ void GCVisitor::visitRange(void* const* start, void* const* end) {
     while (start < end) {
         visit(*start);
         start++;
-    }
-}
-
-void GCVisitor::visitPotential(void* p) {
-    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
-    if (a) {
-        visit(a->user_data);
     }
 }
 
@@ -375,6 +363,23 @@ void GCVisitor::visitPotentialRange(void* const* start, void* const* end) {
 
         visitPotential(*start);
         start++;
+    }
+}
+
+void GCVisitorMarking::visit(void* p) {
+    if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
+        ASSERT(!p || isNonheapRoot(p), "%p", p);
+        return;
+    }
+
+    ASSERT(global_heap.getAllocationFromInteriorPointer(p)->user_data == p, "%p", p);
+    stack->push(p);
+}
+
+void GCVisitorMarking::visitPotential(void* p) {
+    GCAllocation* a = global_heap.getAllocationFromInteriorPointer(p);
+    if (a) {
+        visit(a->user_data);
     }
 }
 
@@ -443,7 +448,7 @@ static void finalizationOrderingFindReachable(Box* obj) {
     Timer _t("finalizationOrderingFindReachable", /*min_usec=*/10000);
 
     TraceStack stack(TraceStackType::FinalizationOrderingFindReachable);
-    GCVisitor visitor(&stack);
+    GCVisitorMarking visitor(&stack);
 
     stack.push(obj);
     while (void* p = stack.pop()) {
@@ -461,7 +466,7 @@ static void finalizationOrderingRemoveTemporaries(Box* obj) {
     Timer _t("finalizationOrderingRemoveTemporaries", /*min_usec=*/10000);
 
     TraceStack stack(TraceStackType::FinalizationOrderingRemoveTemporaries);
-    GCVisitor visitor(&stack);
+    GCVisitorMarking visitor(&stack);
 
     stack.push(obj);
     while (void* p = stack.pop()) {
@@ -644,7 +649,7 @@ static void markPhase() {
 
     GC_TRACE_LOG("Looking at roots\n");
     TraceStack stack(TraceStackType::MarkPhase, roots);
-    GCVisitor visitor(&stack);
+    GCVisitorMarking visitor(&stack);
 
     markRoots(visitor);
 
