@@ -203,7 +203,11 @@ __attribute__((always_inline)) bool _doFree(GCAllocation* al, std::vector<Box*>*
             // Don't bother setting the finalized flag since the object is getting freed right now.
             b->cls->tp_dealloc(b);
         }
+    } else if (alloc_kind == GCKind::RUNTIME) {
+        GCAllocatedRuntime* runtime_obj = reinterpret_cast<GCAllocatedRuntime*>(al->user_data);
+        runtime_obj->simple_finalizer();
     }
+
     return true;
 }
 

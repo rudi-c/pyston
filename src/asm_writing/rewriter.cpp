@@ -1366,7 +1366,7 @@ void Rewriter::commitReturning(RewriterVar* var) {
     commit();
 }
 
-void Rewriter::addDependenceOn(ICInvalidator& invalidator) {
+void Rewriter::addDependenceOn(ICInvalidator* invalidator) {
     rewrite->addDependenceOn(invalidator);
 }
 

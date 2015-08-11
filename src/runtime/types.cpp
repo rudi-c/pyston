@@ -369,6 +369,8 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
         this->doc = None;
     }
 
+    dependent_ics = new ICInvalidator();
+
     assert(f->paramspec.num_defaults == ndefaults);
 }
 
@@ -414,6 +416,8 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
         this->doc = None;
     }
 
+    dependent_ics = new ICInvalidator();
+
     assert(f->paramspec.num_defaults == ndefaults);
 }
 
@@ -452,6 +456,9 @@ void BoxedFunction::gcHandler(GCVisitor* v, Box* b) {
     if (f->globals)
         v->visit(f->globals);
 
+    if (f->dependent_ics)
+        v->visit(f->dependent_ics);
+
     // It's ok for f->defaults to be NULL here even if f->ndefaults isn't,
     // since we could be collecting from inside a BoxedFunctionBase constructor
     if (f->ndefaults) {
@@ -477,14 +484,6 @@ BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const 
     assert(name);
     this->name = static_cast<BoxedString*>(boxString(name));
     this->doc = doc ? boxString(doc) : None;
-}
-
-static void functionDtor(Box* b) {
-    assert(isSubclass(b->cls, function_cls) || isSubclass(b->cls, builtin_function_or_method_cls));
-
-    BoxedFunctionBase* self = static_cast<BoxedFunctionBase*>(b);
-    self->dependent_ics.invalidateAll();
-    self->dependent_ics.~ICInvalidator();
 }
 
 std::string BoxedModule::name() {
@@ -3476,9 +3475,6 @@ void setupRuntime() {
         BoxedHeapClass(object_cls, &BoxedFunction::gcHandler, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
                        sizeof(BoxedBuiltinFunctionOrMethod), false,
                        static_cast<BoxedString*>(boxString("builtin_function_or_method")));
-    function_cls->tp_dealloc = builtin_function_or_method_cls->tp_dealloc = functionDtor;
-    function_cls->has_safe_tp_dealloc = builtin_function_or_method_cls->has_safe_tp_dealloc = true;
-
 
     module_cls = new (0) BoxedHeapClass(object_cls, &BoxedModule::gcHandler, offsetof(BoxedModule, attrs), 0,
                                         sizeof(BoxedModule), false, static_cast<BoxedString*>(boxString("module")));

@@ -25,6 +25,7 @@
 #include "core/common.h"
 #include "core/options.h"
 #include "core/types.h"
+#include "gc/gc_alloc.h"
 
 namespace pyston {
 
@@ -50,10 +51,15 @@ void ICInvalidator::invalidateAll() {
     dependents.clear();
 }
 
-
-
 void ICSlotInfo::clear() {
     ic->clear(this);
+}
+
+void ICInvalidator::gc_visit(GCVisitor* visitor) {
+}
+
+void ICInvalidator::simple_finalizer() {
+    invalidateAll();
 }
 
 ICSlotRewrite::ICSlotRewrite(ICInfo* ic, const char* debug_name)
@@ -129,8 +135,8 @@ void ICSlotRewrite::commit(CommitHook* hook) {
     llvm::sys::Memory::InvalidateInstructionCache(slot_start, ic->getSlotSize());
 }
 
-void ICSlotRewrite::addDependenceOn(ICInvalidator& invalidator) {
-    dependencies.push_back(std::make_pair(&invalidator, invalidator.version()));
+void ICSlotRewrite::addDependenceOn(ICInvalidator* invalidator) {
+    dependencies.push_back(std::make_pair(invalidator, invalidator->version()));
 }
 
 int ICSlotRewrite::getSlotSize() {

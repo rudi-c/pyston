@@ -88,6 +88,11 @@ public:
     void operator delete(void* ptr) __attribute__((visibility("default"))) { gc_free(ptr); }
 
     virtual void gc_visit(GCVisitor* visitor) = 0;
+
+    // Analoguous to has_simple_tp_dealloc on BoxedClasses. Should only contain trivial destruction
+    // logic that does not depend on the order of objects being freed, does not cause objects to be
+    // resurrected, etc.
+    virtual void simple_finalizer(){};
 };
 } // namespace gc
 }

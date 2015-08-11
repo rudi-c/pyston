@@ -45,12 +45,19 @@ void HiddenClass::gc_visit(GCVisitor* visitor) {
     for (const auto& p : children) {
         visitor->visitRedundant(p.first);
     }
+
+    if (dependent_getattrs) {
+        assert(type == SINGLETON);
+        visitor->visit(dependent_getattrs);
+    }
 }
 
 void HiddenClass::appendAttribute(BoxedString* attr) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
+
     assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
+    dependent_getattrs->invalidateAll();
+
     assert(attr_offsets.count(attr) == 0);
     int n = this->attributeArraySize();
     attr_offsets[attr] = n;
@@ -58,17 +65,19 @@ void HiddenClass::appendAttribute(BoxedString* attr) {
 
 void HiddenClass::appendAttrwrapper() {
     assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
+    dependent_getattrs->invalidateAll();
+
     assert(attrwrapper_offset == -1);
     attrwrapper_offset = this->attributeArraySize();
 }
 
 void HiddenClass::delAttribute(BoxedString* attr) {
     assert(attr->interned_state != SSTATE_NOT_INTERNED);
-    assert(type == SINGLETON);
-    dependent_getattrs.invalidateAll();
-    assert(attr_offsets.count(attr));
 
+    assert(type == SINGLETON);
+    dependent_getattrs->invalidateAll();
+
+    assert(attr_offsets.count(attr));
     int prev_idx = attr_offsets[attr];
     attr_offsets.erase(attr);
 
