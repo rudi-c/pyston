@@ -24,11 +24,11 @@ namespace gc {
 class TraceStack;
 class GCVisitor {
 private:
-    bool isValid(void* p);
+    TraceStack* stack;
 
 public:
-    TraceStack* stack;
     GCVisitor(TraceStack* stack) : stack(stack) {}
+    virtual ~GCVisitor() {}
 
     // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
     void visitIf(void* p) {
@@ -39,6 +39,20 @@ public:
     void visitRange(void* const* start, void* const* end);
     void visitPotential(void* p);
     void visitPotentialRange(void* const* start, void* const* end);
+
+    // Some object have fields with pointers to Pyston heap objects that we are confident are
+    // already being scanned elsewhere.
+    //
+    // In a mark-and-sweep collector, scanning those fields would be redundant because the mark
+    // phase only needs to visit each object once, so there would be a performance hit.
+    //
+    // In a moving collector, every reference needs to be visited since the pointer value could
+    // change. We don't have a moving collector yet, but it's good practice to call visit every
+    // pointer value and no-op to avoid the performance hit of the mark-and-sweep case.
+    virtual void visitRedundant(void* p) {}
+    virtual void visitRedundantRange(void** start, void** end) {}
+    virtual void visitPotentialRedundant(void* p) {}
+    virtual void visitPotentialRangeRedundant(void* const* start, void* const* end) {}
 };
 
 enum class GCKind : uint8_t {
