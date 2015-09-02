@@ -250,23 +250,19 @@ public:
 
     GCAllocation* alloc(size_t bytes) {
         registerGCManagedBytes(bytes);
-        if (bytes <= 16)
-            return _alloc(16, 0);
-        else if (bytes <= 32)
-            return _alloc(32, 1);
-        else {
-            for (int i = 2; i < NUM_BUCKETS; i++) {
-                if (sizes[i] >= bytes) {
-                    return _alloc(sizes[i], i);
-                }
-            }
-            return NULL;
-        }
+        return allocDirect(bytes);
     }
 
     void move_all(ReferenceMap& refmap);
 
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
+
+    // Slightly different than realloc in that:
+    // 1) The size is the same, so we calls alloc in the SmallArena.
+    // 2) Uses a variant of alloc that doesn't register a change in the number of bytes allocated.
+    // 3) Always reallocates the object to a different address.
+    GCAllocation* moveRealloc(GCAllocation* alloc);
+
     void free(GCAllocation* al);
 
     GCAllocation* allocationFrom(void* ptr);
@@ -284,6 +280,21 @@ public:
 #endif
 
 private:
+    __attribute__((always_inline)) GCAllocation* allocDirect(size_t bytes) {
+        if (bytes <= 16)
+            return _alloc(16, 0);
+        else if (bytes <= 32)
+            return _alloc(32, 1);
+        else {
+            for (int i = 2; i < NUM_BUCKETS; i++) {
+                if (sizes[i] >= bytes) {
+                    return _alloc(sizes[i], i);
+                }
+            }
+            return NULL;
+        }
+    }
+
     template <int N> class Bitmap {
         static_assert(N % 64 == 0, "");
 

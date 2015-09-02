@@ -354,6 +354,26 @@ GCAllocation* SmallArena::realloc(GCAllocation* al, size_t bytes) {
     return rtn;
 }
 
+GCAllocation* SmallArena::moveRealloc(GCAllocation* al) {
+    Block* b = Block::forPointer(al);
+
+    size_t size = b->size;
+
+    // Don't register moves, they don't use more memory and they could trigger another GC.
+    GCAllocation* rtn = allocDirect(size);
+
+#ifndef NVALGRIND
+    VALGRIND_DISABLE_ERROR_REPORTING;
+    memcpy(rtn, al, size);
+    VALGRIND_ENABLE_ERROR_REPORTING;
+#else
+    memcpy(rtn, al, size);
+#endif
+
+    free(al);
+    return rtn;
+}
+
 void SmallArena::free(GCAllocation* alloc) {
     Block* b = Block::forPointer(alloc);
     size_t size = b->size;
@@ -436,14 +456,53 @@ void SmallArena::getPointersInBlockChain(std::vector<GCAllocation*>& ptrs, Block
     }
 }
 
-void SmallArena::move(ReferenceMap& refmap, GCAllocation* al, size_t size) {
+#define MOVE_LOG 1
+
+extern int ncollections;
+static FILE* move_log;
+
+void SmallArena::move(ReferenceMap& refmap, GCAllocation* old_al, size_t size) {
+#if MOVE_LOG
+    if (!move_log) {
+        move_log = fopen("movelog.txt", "w");
+    }
+#endif
+
     // Only move objects that are in the reference map (unreachable objects
     // won't be in the reference map).
-    if (refmap.pinned.count(al) == 0 && refmap.references.count(al) > 0) {
-        auto& referencing = refmap.references[al];
+    if (refmap.pinned.count(old_al) == 0 && refmap.references.count(old_al) > 0) {
+        auto& referencing = refmap.references[old_al];
         assert(referencing.size() > 0);
-        // GCAllocation* new_al = realloc(al, size);
-    } else if (refmap.pinned.count(al) == 0) {
+
+        GCAllocation* new_al = moveRealloc(old_al);
+        assert(new_al);
+        assert(old_al->user_data != new_al->user_data);
+
+#if MOVE_LOG
+        // Write the moves that have happened to file, for debugging.
+        fprintf(move_log, "%d) %p -> %p\n", ncollections, old_al->user_data, new_al->user_data);
+#endif
+
+        for (GCAllocation* referencer : referencing) {
+            // If the whatever is pointing to the object we just moved has also been moved,
+            // then we need to update the pointer in that moved object.
+            if (refmap.moves.count(referencer) > 0) {
+                referencer = refmap.moves[referencer];
+            }
+
+#if MOVE_LOG
+            fprintf(move_log, "    | referencer %p\n", referencer->user_data);
+#endif
+
+            assert(referencer->kind_id == GCKind::PYTHON || referencer->kind_id == GCKind::PRECISE
+                   || referencer->kind_id == GCKind::RUNTIME);
+            GCVisitorReplacing replacer(old_al->user_data, new_al->user_data);
+            visitByGCKind(referencer->user_data, replacer);
+        }
+
+        assert(refmap.moves.count(old_al) == 0);
+        refmap.moves.emplace(old_al, new_al);
+    } else if (refmap.pinned.count(old_al) == 0) {
         // TODO: This probably should not happen.
     }
 }

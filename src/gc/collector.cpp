@@ -61,7 +61,7 @@ static std::unordered_set<GCRootHandle*>* getRootHandles() {
     return &root_handles;
 }
 
-static int ncollections = 0;
+int ncollections = 0;
 
 static bool gc_enabled = true;
 static bool should_not_reenter_gc = false;
@@ -386,6 +386,41 @@ void invalidateOrderedFinalizerList() {
     sc_us.log(us);
 }
 
+__attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
+    assert(((intptr_t)p) % 8 == 0);
+
+    GCAllocation* al = GCAllocation::fromUserData(p);
+    visitor.setSource(al);
+
+    GCKind kind_id = al->kind_id;
+    if (kind_id == GCKind::UNTRACKED) {
+        // Nothing to do here.
+    } else if (kind_id == GCKind::CONSERVATIVE) {
+        uint32_t bytes = al->kind_data;
+        visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PRECISE) {
+        uint32_t bytes = al->kind_data;
+        visitor.visitRange((void**)p, (void**)((char*)p + bytes));
+    } else if (kind_id == GCKind::PYTHON) {
+        Box* b = reinterpret_cast<Box*>(p);
+        BoxedClass* cls = b->cls;
+
+        if (cls) {
+            // The cls can be NULL since we use 'new' to construct them.
+            // An arbitrary amount of stuff can happen between the 'new' and
+            // the call to the constructor (ie the args get evaluated), which
+            // can trigger a collection.
+            ASSERT(cls->gc_visit, "%s", getTypeName(b));
+            cls->gc_visit(&visitor, b);
+        }
+    } else if (kind_id == GCKind::RUNTIME) {
+        GCAllocatedRuntime* runtime_obj = reinterpret_cast<GCAllocatedRuntime*>(p);
+        runtime_obj->gc_visit(&visitor);
+    } else {
+        RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
+    }
+}
+
 GCRootHandle::GCRootHandle() {
     getRootHandles()->insert(this);
 }
@@ -468,38 +503,9 @@ void GCVisitorPinning::visitPotential(void* p) {
     }
 }
 
-static __attribute__((always_inline)) void visitByGCKind(void* p, GCVisitor& visitor) {
-    assert(((intptr_t)p) % 8 == 0);
-
-    GCAllocation* al = GCAllocation::fromUserData(p);
-    visitor.setSource(al);
-
-    GCKind kind_id = al->kind_id;
-    if (kind_id == GCKind::UNTRACKED) {
-        // Nothing to do here.
-    } else if (kind_id == GCKind::CONSERVATIVE) {
-        uint32_t bytes = al->kind_data;
-        visitor.visitPotentialRange((void**)p, (void**)((char*)p + bytes));
-    } else if (kind_id == GCKind::PRECISE) {
-        uint32_t bytes = al->kind_data;
-        visitor.visitRange((void**)p, (void**)((char*)p + bytes));
-    } else if (kind_id == GCKind::PYTHON) {
-        Box* b = reinterpret_cast<Box*>(p);
-        BoxedClass* cls = b->cls;
-
-        if (cls) {
-            // The cls can be NULL since we use 'new' to construct them.
-            // An arbitrary amount of stuff can happen between the 'new' and
-            // the call to the constructor (ie the args get evaluated), which
-            // can trigger a collection.
-            ASSERT(cls->gc_visit, "%s", getTypeName(b));
-            cls->gc_visit(&visitor, b);
-        }
-    } else if (kind_id == GCKind::RUNTIME) {
-        GCAllocatedRuntime* runtime_obj = reinterpret_cast<GCAllocatedRuntime*>(p);
-        runtime_obj->gc_visit(&visitor);
-    } else {
-        RELEASE_ASSERT(0, "Unhandled kind: %d", (int)kind_id);
+void GCVisitorReplacing::_visit(void** ptr_address) {
+    if (*ptr_address == old_value) {
+        *ptr_address = new_value;
     }
 }
 
