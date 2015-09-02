@@ -93,6 +93,7 @@ inline void registerGCManagedBytes(size_t bytes) {
 
 
 class Heap;
+class ReferenceMap;
 struct HeapStatistics;
 
 typedef uint8_t kindid_t;
@@ -263,6 +264,8 @@ public:
         }
     }
 
+    void move_all(ReferenceMap& refmap);
+
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
     void free(GCAllocation* al);
 
@@ -405,6 +408,8 @@ private:
     // TODO only use thread caches if we're in GRWL mode?
     threading::PerThreadSet<ThreadBlockCache, Heap*, SmallArena*> thread_caches;
 
+    void getPointersInBlockChain(std::vector<GCAllocation*>& ptrs, Block** head);
+    void move(ReferenceMap& refmap, GCAllocation* al, size_t size);
     Block* _allocBlock(uint64_t size, Block** prev);
     GCAllocation* _allocFromBlock(Block* b);
     Block* _claimBlock(size_t rounded_size, Block** free_head);
@@ -624,6 +629,11 @@ public:
 
         return NULL;
     }
+
+    // Reallocate (aka 'move') all objects in the small heap to a different
+    // location. This is not useful in terms of performance, but it is useful
+    // to check if the rest of the program is able to support moving collectors.
+    void move_all(ReferenceMap& refmap) { small_arena.move_all(refmap); }
 
     // not thread safe:
     void freeUnmarked(std::vector<Box*>& weakly_referenced) {

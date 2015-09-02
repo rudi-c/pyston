@@ -414,6 +414,64 @@ void SmallArena::assertConsistent() {
 }
 #endif
 
+void SmallArena::getPointersInBlockChain(std::vector<GCAllocation*>& ptrs, Block** head) {
+    while (Block* b = *head) {
+        int num_objects = b->numObjects();
+        int first_obj = b->minObjIndex();
+        int atoms_per_obj = b->atomsPerObj();
+
+        for (int atom_idx = first_obj * atoms_per_obj; atom_idx < num_objects * atoms_per_obj;
+             atom_idx += atoms_per_obj) {
+
+            if (b->isfree.isSet(atom_idx))
+                continue;
+
+            void* p = &b->atoms[atom_idx];
+            GCAllocation* al = reinterpret_cast<GCAllocation*>(p);
+
+            ptrs.push_back(al);
+        }
+
+        head = &b->next;
+    }
+}
+
+void SmallArena::move(ReferenceMap& refmap, GCAllocation* al, size_t size) {
+    // Only move objects that are in the reference map (unreachable objects
+    // won't be in the reference map).
+    if (refmap.pinned.count(al) == 0 && refmap.references.count(al) > 0) {
+        auto& referencing = refmap.references[al];
+        assert(referencing.size() > 0);
+        // GCAllocation* new_al = realloc(al, size);
+    } else if (refmap.pinned.count(al) == 0) {
+        // TODO: This probably should not happen.
+    }
+}
+
+void SmallArena::move_all(ReferenceMap& refmap) {
+    thread_caches.forEachValue([this, &refmap](ThreadBlockCache* cache) {
+        for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+            Block* h = cache->cache_free_heads[bidx];
+            std::vector<GCAllocation*> ptrs;
+            getPointersInBlockChain(ptrs, &cache->cache_free_heads[bidx]);
+            getPointersInBlockChain(ptrs, &cache->cache_full_heads[bidx]);
+
+            for (GCAllocation* al : ptrs) {
+                move(refmap, al, sizes[bidx]);
+            }
+        }
+    });
+
+    for (int bidx = 0; bidx < NUM_BUCKETS; bidx++) {
+        std::vector<GCAllocation*> ptrs;
+        getPointersInBlockChain(ptrs, &heads[bidx]);
+        getPointersInBlockChain(ptrs, &full_heads[bidx]);
+        for (GCAllocation* al : ptrs) {
+            move(refmap, al, sizes[bidx]);
+        }
+    }
+}
+
 void SmallArena::freeUnmarked(std::vector<Box*>& weakly_referenced) {
     assertConsistent();
 
