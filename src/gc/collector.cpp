@@ -233,6 +233,7 @@ public:
     }
 };
 
+#if MOVING_GC
 class ReferenceMapWorklist : public Worklist {
     ReferenceMap* refmap;
 
@@ -285,6 +286,7 @@ public:
 
     void pin(GCAllocation* al) { refmap->pinned.emplace(al); }
 };
+#endif
 
 void registerPermanentRoot(void* obj, bool allow_duplicates) {
     assert(global_heap.getAllocationFromInteriorPointer(obj));
@@ -483,6 +485,7 @@ void GCVisitor::visitPotentialRange(void** start, void** end) {
     }
 }
 
+#if MOVING_GC
 void GCVisitorPinning::_visit(void** ptr_address) {
     void* p = *ptr_address;
     if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
@@ -508,6 +511,7 @@ void GCVisitorReplacing::_visit(void** ptr_address) {
         *ptr_address = new_value;
     }
 }
+#endif
 
 static void visitRoots(GCVisitor& visitor) {
     GC_TRACE_LOG("Looking at the stack\n");
@@ -776,6 +780,7 @@ static void sweepPhase(std::vector<Box*>& weakly_referenced) {
 }
 
 static void mapReferencesPhase(ReferenceMap& refmap) {
+#if MOVING_GC
     ReferenceMapWorklist worklist(&refmap, roots);
     GCVisitorPinning visitor(&worklist);
 
@@ -786,6 +791,7 @@ static void mapReferencesPhase(ReferenceMap& refmap) {
     }
 
     graphTraversalMarking(worklist, visitor);
+#endif
 }
 
 // Move objects around memory randomly. The purpose is to test whether the rest
@@ -799,6 +805,7 @@ static void mapReferencesPhase(ReferenceMap& refmap) {
 // 2) Reallocate all non-pinned object. Update the value for every pointer locations
 //    from the map built in (1)
 static void testMoving() {
+#if MOVING_GC
     global_heap.prepareForCollection();
 
     ReferenceMap refmap;
@@ -807,6 +814,7 @@ static void testMoving() {
     global_heap.move_all(refmap);
 
     global_heap.cleanupAfterCollection();
+#endif
 }
 
 bool gcIsEnabled() {

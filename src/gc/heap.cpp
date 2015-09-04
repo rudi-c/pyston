@@ -462,6 +462,7 @@ extern int ncollections;
 static FILE* move_log;
 
 void SmallArena::move(ReferenceMap& refmap, GCAllocation* old_al, size_t size) {
+#if MOVING_GC
 #if MOVE_LOG
     if (!move_log) {
         move_log = fopen("movelog.txt", "w");
@@ -505,6 +506,7 @@ void SmallArena::move(ReferenceMap& refmap, GCAllocation* old_al, size_t size) {
     } else if (refmap.pinned.count(old_al) == 0) {
         // TODO: This probably should not happen.
     }
+#endif
 }
 
 void SmallArena::move_all(ReferenceMap& refmap) {
